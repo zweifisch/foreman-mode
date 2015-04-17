@@ -31,6 +31,9 @@
   :type 'string)
 
 (defvar foreman-tasks '())
+;; (setq foreman-tasks '())
+
+(defvar foreman-current-id nil)
 
 (defvar foreman-mode-map nil "Keymap for foreman mode.")
 
@@ -38,22 +41,23 @@
 (define-key foreman-mode-map "q" 'quit-window)
 (define-key foreman-mode-map "s" 'foreman-start-proc)
 (define-key foreman-mode-map "r" 'foreman-restart-proc)
+(define-key foreman-mode-map (kbd "RET") 'foreman-view-buffer)
 (define-key foreman-mode-map "k" 'foreman-stop-proc)
 
 (define-derived-mode foreman-mode tabulated-list-mode "foreman-mode"
   "forman-mode to manage procfile-based applications"
   (setq mode-name "Foreman")
-  (setq tabulated-list-format [("Proc" 18 t)
+  (setq tabulated-list-format [("name" 18 t)
+                               ("status" 12 t)
                                ("command" 12 nil)])
   (setq tabulated-list-padding 2)
-  (setq tabulated-list-sort-key (cons "Proc" nil))
+  (setq tabulated-list-sort-key (cons "name" nil))
   (tabulated-list-init-header))
 
 (defun foreman ()
   (interactive)
   (load-procfile (find-procfile))
-  (foreman-mode-fill-buffer
-   "Foreman"))
+  (foreman-fill-buffer))
 
 (defun load-procfile (path)
   (let ((directory (f-parent path)))
@@ -69,8 +73,6 @@
                           (setq foreman-tasks
                                 (cons `(,key . ((name . ,(s-trim (car task)))
                                                 (directory . ,directory)
-                                                (buffer . nil)
-                                                (process . nil)
                                                 (command . ,(s-trim (cadr task)))))
                                       foreman-tasks)))))))
       nil)))
@@ -84,7 +86,7 @@
 
 ;; (defun foreman-history ()
 ;;   (interactive)
-;;   (foreman-mode-fill-buffer
+;;   (foreman-fill-buffer
 ;;    "History"
 ;;    (load-procfile foreman:history-path)))
 
@@ -94,7 +96,8 @@
 (defun foreman-make-task-buffer (task-name working-directory)
   (let ((buffer (generate-new-buffer task-name)))
     (with-current-buffer buffer
-      (setq default-directory (f-slash working-directory)))
+      (setq default-directory (f-slash working-directory))
+      (set (make-local-variable 'window-point-insertion-type) t))
     buffer))
 
 (defun foreman-ensure-task-buffer (task-name working-directory buffer)
@@ -110,20 +113,36 @@
          (name (format "*%s:%s*" (-last-item (f-split directory)) (cdr (assoc 'name task))))
          (buffer (foreman-ensure-task-buffer name directory (cdr (assoc 'buffer task))))
          (process (with-current-buffer buffer
-                    (apply 'start-process name buffer (s-split " +" command)))))
-    (setf (cdr (assoc 'buffer task)) buffer)
-    (setf (cdr (assoc 'process task)) process)
-    (pop-to-buffer buffer)
-    (message directory)
-    (revert-buffer)))
+                    (apply 'start-process-shell-command name buffer (s-split " +" command)))))
+    (if (assoc 'buffer task)
+        (setf (cdr (assoc 'buffer task)) buffer)
+      (setq task (cons `(buffer . ,buffer) task)))
+    (if (assoc 'process task)
+        (setf (cdr (assoc 'process task)) process)
+      (setq task (cons `(process . ,process) task)))
+    (setf (cdr (assoc task-id foreman-tasks)) task)
+    (revert-buffer)
+    (pop-to-buffer buffer nil t)
+    (other-window -1)
+    (message directory)))
 
 (defun foreman-stop-proc ()
   (interactive)
-  (let ((process (get-text-property (point) 'tabulated-list-id)))
+  (let* ((task-id (get-text-property (point) 'tabulated-list-id))
+         (task (cdr (assoc task-id foreman-tasks)))
+         (process (cdr (assoc 'process task))))
     (if (y-or-n-p (format "stop process %s? " (process-name process)))
         (progn 
-          (restart-process process)
+          (delete-process process)
           (revert-buffer)))))
+
+(defun foreman-view-buffer ()
+  (interactive)
+  (let* ((task-id (get-text-property (point) 'tabulated-list-id))
+         (task (cdr (assoc task-id foreman-tasks)))
+         (buffer (cdr (assoc 'buffer task))))
+    (pop-to-buffer buffer nil t)
+    (other-window -1)))
 
 (defun foreman-restart-proc ()
   (interactive)
@@ -133,29 +152,40 @@
           (restart-process process)
           (revert-buffer)))))
 
-(defun foreman-mode-fill-buffer (title)
+(defun foreman-fill-buffer ()
   (switch-to-buffer (get-buffer-create "*foreman*"))
+  (kill-all-local-variables)
   (setq buffer-read-only nil)
   (erase-buffer)
   (foreman-mode)
-  (setq tabulated-list-entries (forman-task-tabulate))
+  (setq tabulated-list-entries (foreman-task-tabulate))
   (tabulated-list-print t)
   (setq buffer-read-only t))
 
-(defun forman-task-tabulate ()
+(defun foreman-task-tabulate ()
   (-map (lambda (task)
-          (let ((detail (cdr task)))
+          (let* ((detail (cdr task))
+                 (process (cdr (assoc 'process detail))))
             (list (car task)
                   (vconcat
                    (list (cdr (assoc 'name detail))
+                         (if process (symbol-name (process-status process)) "")
                          (cdr (assoc 'command detail))))))) foreman-tasks))
 
+(add-hook 'tabulated-list-revert-hook
+          (lambda ()
+            (interactive)
+            (load-procfile (find-procfile))
+            (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
+            (foreman-fill-buffer)
+            (while (and (< (point) (point-max))
+                        (not (string= foreman-current-id
+                              (get-text-property (point) 'tabulated-list-id))))
+              (next-line))))
 
 (provide 'foreman-mode)
 ;;; foreman-mode.el ends here
 
-
-;; (setq foreman-tasks '())
 
 ;; (load-procfile "~/Procfile")
 
