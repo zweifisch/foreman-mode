@@ -1,0 +1,16 @@
+* foreman-mode
+
+Manage Procfile-based applications in Emacs
+
+use =foreman-start= to start all applications
+or =foreman= to list all applications specified in =Procfile=
+
+| key   | desc                  |
+|-------+-----------------------|
+| =s=   | start                 |
+| =k=   | kill process          |
+| =r=   | restart process       |
+| =RET= | view process buffer   |
+| =d=   | delete process buffer |
+| =g=   | revert buffer         |
+| =q=   | quit                  |
