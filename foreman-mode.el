@@ -66,6 +66,22 @@
     'foreman-start-proc-internal)
   (foreman-fill-buffer))
 
+(defun foreman-stop ()
+  (interactive)
+  (-each (load-procfile (find-procfile))
+    (lambda (task-id)
+      (if (assoc task-id foreman-tasks)
+          (progn 
+            (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
+              (if buffer (kill-buffer buffer)))
+            (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks))))))
+  (message "all process killed"))
+
+(defun foreman-restart ()
+  (interactive)
+  (foreman-stop)
+  (foreman-start))
+
 (defun load-procfile (path)
   (let ((directory (f-parent path)))
     (with-temp-buffer
