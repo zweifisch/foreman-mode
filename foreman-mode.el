@@ -144,12 +144,26 @@
     (pop-to-buffer buffer nil t)
     (other-window -1)))
 
+(defun foreman-get-in (alist &rest keys)
+  (if keys
+      (apply 'foreman-get-in (cdr (assoc (car keys) alist)) (cdr keys))
+    alist))
+
 (defun foreman-restart-proc ()
   (interactive)
-  (let ((process (get-text-property (point) 'tabulated-list-id)))
+  (let* ((task-id (get-text-property (point) 'tabulated-list-id))
+         (task (cdr (assoc task-id foreman-tasks)))
+         (buffer (cdr (assoc 'buffer task)))
+         (command (cdr (assoc 'command task)))
+         (directory (cdr (assoc 'directory task)))
+         (name (format "*%s:%s*" (-last-item (f-split directory)) (cdr (assoc 'name task))))
+         (process (cdr (assoc 'process task))))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
         (progn 
-          (restart-process process)
+          (delete-process process)
+          (setf (cdr (assoc 'process task))
+                (with-current-buffer buffer
+                  (apply 'start-process-shell-command name buffer (s-split " +" command))))
           (revert-buffer)))))
 
 (defun foreman-fill-buffer ()
