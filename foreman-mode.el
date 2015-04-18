@@ -44,6 +44,8 @@
 (define-key foreman-mode-map (kbd "RET") 'foreman-view-buffer)
 (define-key foreman-mode-map "k" 'foreman-stop-proc)
 (define-key foreman-mode-map "d" 'foreman-kill-buffer)
+(define-key foreman-mode-map "n" 'foreman-next-line)
+(define-key foreman-mode-map "p" 'foreman-previous-line)
 
 (define-derived-mode foreman-mode tabulated-list-mode "foreman-mode"
   "forman-mode to manage procfile-based applications"
@@ -81,6 +83,18 @@
   (interactive)
   (foreman-stop)
   (foreman-start))
+
+(defun foreman-next-line ()
+  (interactive)
+  (if (> (count-lines (point) (point-max)) 1)
+      (progn 
+        (forward-line 1)
+        (foreman-view-buffer))))
+
+(defun foreman-previous-line ()
+  (interactive)
+  (forward-line -1)
+  (foreman-view-buffer))
 
 (defun load-procfile (path)
   (let ((directory (f-parent path)))
@@ -162,12 +176,19 @@
           (kill-buffer buffer)
           (revert-buffer)))))
 
+(defun foreman-error-buffer (msg)
+  (let ((buffer (get-buffer-create "*foreman-error*")))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (insert msg))
+    buffer))
+
 (defun foreman-view-buffer ()
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
-         (task (cdr (assoc task-id foreman-tasks)))
-         (buffer (cdr (assoc 'buffer task))))
-    (pop-to-buffer buffer nil t)
+         (buffer (foreman-get-in foreman-tasks task-id 'buffer)))
+    (pop-to-buffer (if (buffer-live-p buffer) buffer
+                     (foreman-error-buffer "application not running\n")) nil t)
     (other-window -1)))
 
 (defun foreman-get-in (alist &rest keys)
