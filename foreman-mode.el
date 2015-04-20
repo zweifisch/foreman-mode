@@ -42,7 +42,7 @@
 (define-key foreman-mode-map "s" 'foreman-start-proc)
 (define-key foreman-mode-map "r" 'foreman-restart-proc)
 (define-key foreman-mode-map (kbd "RET") 'foreman-view-buffer)
-(define-key foreman-mode-map "k" 'foreman-stop-proc)
+(define-key foreman-mode-map "k" 'foreman-kill-proc)
 (define-key foreman-mode-map "d" 'foreman-kill-buffer)
 (define-key foreman-mode-map "n" 'foreman-next-line)
 (define-key foreman-mode-map "p" 'foreman-previous-line)
@@ -72,12 +72,15 @@
   (interactive)
   (-each (load-procfile (find-procfile))
     (lambda (task-id)
-      (if (assoc task-id foreman-tasks)
-          (progn 
-            (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-              (if buffer (kill-buffer buffer)))
-            (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks))))))
+      (cond ((assoc task-id foreman-tasks)
+             (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
+               (if buffer (kill-buffer buffer)))
+             (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks))))))
   (message "all process killed"))
+
+(defun foreman-clear ()
+  (interactive)
+  (setq foreman-tasks nil))
 
 (defun foreman-restart ()
   (interactive)
@@ -105,14 +108,14 @@
            (-remove 's-blank?)
            (-map (-partial 's-split ":"))
            (-map (lambda (task)
-                    (let ((key (format "%s:%s" directory (car task))))
-                      (if (not (assoc key foreman-tasks))
-                          (setq foreman-tasks
-                                (cons `(,key . ((name . ,(s-trim (car task)))
-                                                (directory . ,directory)
-                                                (command . ,(s-trim (cadr task)))))
-                                      foreman-tasks)))
-                      key)))))))
+                   (let ((key (format "%s:%s" directory (car task))))
+                     (if (not (assoc key foreman-tasks))
+                         (setq foreman-tasks
+                               (cons `(,key . ((name . ,(s-trim (car task)))
+                                               (directory . ,directory)
+                                               (command . ,(s-trim (cadr task)))))
+                                     foreman-tasks)))
+                     key)))))))
 
 (defun find-procfile ()
   (let ((dir (f-traverse-upwards
@@ -157,14 +160,14 @@
           (setq task (cons `(process . ,process) task)))
         (setf (cdr (assoc task-id foreman-tasks)) task))))
 
-(defun foreman-stop-proc ()
+(defun foreman-kill-proc ()
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (task (cdr (assoc task-id foreman-tasks)))
          (process (cdr (assoc 'process task))))
-    (if (y-or-n-p (format "stop process %s? " (process-name process)))
+    (if (y-or-n-p (format "kill process %s? " (process-name process)))
         (progn 
-          (delete-process process)
+          (kill-process process)
           (revert-buffer)))))
 
 (defun foreman-kill-buffer ()
@@ -188,7 +191,7 @@
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (buffer (foreman-get-in foreman-tasks task-id 'buffer)))
     (pop-to-buffer (if (buffer-live-p buffer) buffer
-                     (foreman-error-buffer "application not running\n")) nil t)
+                     (foreman-error-buffer "application not running\n")) t t)
     (other-window -1)))
 
 (defun foreman-get-in (alist &rest keys)
@@ -207,7 +210,7 @@
          (process (cdr (assoc 'process task))))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
         (progn 
-          (delete-process process)
+          (kill-process process)
           (setf (cdr (assoc 'process task))
                 (with-current-buffer buffer
                   (apply 'start-process-shell-command name buffer (s-split " +" command))))
@@ -241,7 +244,7 @@
             (foreman-fill-buffer)
             (while (and (< (point) (point-max))
                         (not (string= foreman-current-id
-                              (get-text-property (point) 'tabulated-list-id))))
+                                      (get-text-property (point) 'tabulated-list-id))))
               (next-line))))
 
 (provide 'foreman-mode)
