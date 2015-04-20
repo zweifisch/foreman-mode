@@ -165,10 +165,10 @@
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (task (cdr (assoc task-id foreman-tasks)))
          (process (cdr (assoc 'process task))))
-    (if (y-or-n-p (format "kill process %s? " (process-name process)))
-        (progn 
-          (kill-process process)
-          (revert-buffer)))))
+    (cond ((and (process-live-p process)
+                (y-or-n-p (format "kill process %s? " (process-name process))))
+           (kill-process process)
+           (revert-buffer)))))
 
 (defun foreman-kill-buffer ()
   (interactive)
