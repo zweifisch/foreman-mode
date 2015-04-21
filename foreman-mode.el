@@ -19,6 +19,7 @@
 (require 'f)
 (require 'dash)
 (require 'tabulated-list)
+(require 'ansi-color)
 
 (defcustom foreman:history-path "~/.emacs.d/foreman-history"
   "path for persistent proc history"
@@ -106,6 +107,7 @@
           (insert-file-contents path))
       (->> (s-lines (buffer-string))
            (-remove 's-blank?)
+           (-remove (-partial 's-starts-with? "#"))
            (-map (-partial 's-split ":"))
            (-map (lambda (task)
                    (let ((key (format "%s:%s" directory (car task))))
@@ -128,7 +130,9 @@
   (let ((buffer (generate-new-buffer task-name)))
     (with-current-buffer buffer
       (setq default-directory (f-slash working-directory))
-      (set (make-local-variable 'window-point-insertion-type) t))
+      (set (make-local-variable 'window-point-insertion-type) t)
+      (add-hook 'after-change-functions (lambda (start end length)
+                                          (ansi-color-apply-on-region start end))))
     buffer))
 
 (defun foreman-ensure-task-buffer (task-name working-directory buffer)
