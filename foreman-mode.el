@@ -178,10 +178,10 @@
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-    (if (y-or-n-p (format "kill buffer %s? " (buffer-name buffer)))
-        (progn 
-          (kill-buffer buffer)
-          (revert-buffer)))))
+    (cond ((and (buffer-live-p buffer)
+                (y-or-n-p (format "kill buffer %s? " (buffer-name buffer))))
+           (kill-buffer buffer)
+           (revert-buffer)))))
 
 (defun foreman-error-buffer (msg)
   (let ((buffer (get-buffer-create "*foreman-error*")))
