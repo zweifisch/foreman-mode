@@ -45,6 +45,7 @@
 (define-key foreman-mode-map (kbd "RET") 'foreman-view-buffer)
 (define-key foreman-mode-map "k" 'foreman-kill-proc)
 (define-key foreman-mode-map "d" 'foreman-kill-buffer)
+(define-key foreman-mode-map "e" 'foreman-edit-env)
 (define-key foreman-mode-map "n" 'foreman-next-line)
 (define-key foreman-mode-map "p" 'foreman-previous-line)
 
@@ -139,6 +140,37 @@
 (defun foreman-ensure-task-buffer (task-name working-directory buffer)
   (if (buffer-live-p buffer) buffer
     (foreman-make-task-buffer task-name working-directory)))
+
+(defun foreman-set-env ()
+  (let ((lines (->> (buffer-string)
+                    s-lines
+                    (-remove 's-blank?)
+                    (-remove (-partial 's-starts-with? "#"))))
+        (task (cdr (assoc local-task-id foreman-tasks))))
+    (if (assoc 'env task)
+        (setf (cdr (assoc 'env task)) lines)
+      (setq task (cons `(env . ,lines) task))))
+  (set-buffer-modified-p nil)
+  (kill-buffer)
+  t)
+
+(defun foreman-edit-env ()
+  (interactive)
+  (let ((task-id (get-text-property (point) 'tabulated-list-id))
+        (buffer (get-buffer-create "*foreman-env*"))
+        (save-buffer (lambda () (message "aha"))))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (conf-mode)
+      (setq buffer-file-name "foreman-env")
+      (defvar-local local-task-id task-id)
+      (add-hook 'write-contents-functions 'foreman-set-env)
+      (insert "# environment variables will passed after process restart\n")
+      (insert "# example http_proxy=http://localhost:8080\n")
+      (-each (foreman-get-in foreman-tasks task-id 'env)
+        (lambda (variable) (insert (format "%s\n" variable))))
+      (goto-char 0))
+    (switch-to-buffer buffer)))
 
 (defun foreman-start-proc ()
   (interactive)
