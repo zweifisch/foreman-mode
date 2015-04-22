@@ -61,7 +61,8 @@
 (defun foreman ()
   (interactive)
   (load-procfile (find-procfile))
-  (foreman-fill-buffer))
+  (foreman-fill-buffer)
+  (foreman-restore-cursor))
 
 (defun foreman-start ()
   (interactive)
@@ -240,16 +241,19 @@
                          (if process (symbol-name (process-status process)) "")
                          (cdr (assoc 'command detail))))))) foreman-tasks))
 
+(defun foreman-restore-cursor ()
+  (while (and (< (point) (point-max))
+              (not (string= foreman-current-id
+                            (get-text-property (point) 'tabulated-list-id))))
+    (next-line)))
+
 (add-hook 'tabulated-list-revert-hook
           (lambda ()
             (interactive)
             (load-procfile (find-procfile))
             (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
             (foreman-fill-buffer)
-            (while (and (< (point) (point-max))
-                        (not (string= foreman-current-id
-                                      (get-text-property (point) 'tabulated-list-id))))
-              (next-line))))
+            (foreman-restore-cursor)))
 
 (provide 'foreman-mode)
 ;;; foreman-mode.el ends here
