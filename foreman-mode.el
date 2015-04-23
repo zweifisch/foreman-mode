@@ -63,8 +63,16 @@
 (define-key foreman-env-mode-map (kbd "C-c C-c") 'foreman-env-save)
 (define-key foreman-env-mode-map (kbd "C-c C-k") 'foreman-env-abort)
 
+(defvar foreman-env-font-lock-defaults nil)
+(setq foreman-env-font-lock-defaults
+  `(("\\([^=]+\\)=\\(.*\\)" (1 font-lock-variable-name-face) (2 font-lock-string-face))
+    ("\\(#.*\\)" (1 font-lock-comment-face))))
+
 (define-derived-mode foreman-env-mode fundamental-mode "Foreman ENV"
-  "mode for editing process enviroment variables")
+  "mode for editing process enviroment variables"
+  (setq font-lock-defaults '(foreman-env-font-lock-defaults))
+  (modify-syntax-entry ?# "< b" coffee-mode-syntax-table)
+  (modify-syntax-entry ?\n "> b" coffee-mode-syntax-table))
 
 (defun foreman ()
   (interactive)
@@ -176,7 +184,7 @@
       (erase-buffer)
       (foreman-env-mode)
       (set (make-local-variable 'local-task-id) task-id)
-      (insert "# environment variables will passed after process restart
+      (insert "# environment variables will be passed when start/restart process
 # C-c C-c to save, C-c C-k to abort
 # example
 #
@@ -256,9 +264,10 @@
 
 (defun foreman-kill-process (process timeout)
   (kill-process process)
-  (with-timeout (timeout (message "process not killed"))
+  (with-timeout (timeout nil)
     (while (process-live-p process)
-      (sit-for .05))))
+      (sit-for .05))
+    t))
 
 (defun foreman-restart-proc ()
   (interactive)
@@ -266,8 +275,9 @@
          (process (foreman-get-in foreman-tasks task-id 'process )))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
         (progn 
-          (foreman-kill-process process 2)
-          (foreman-start-proc-internal task-id)
+          (if (foreman-kill-process process 2)
+              (foreman-start-proc-internal task-id)
+            (message "process still alive"))
           (revert-buffer)))))
 
 (defun foreman-fill-buffer ()
