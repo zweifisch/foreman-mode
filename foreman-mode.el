@@ -49,15 +49,22 @@
 (define-key foreman-mode-map "n" 'foreman-next-line)
 (define-key foreman-mode-map "p" 'foreman-previous-line)
 
-(define-derived-mode foreman-mode tabulated-list-mode "foreman-mode"
+(define-derived-mode foreman-mode tabulated-list-mode "Foreman"
   "forman-mode to manage procfile-based applications"
-  (setq mode-name "Foreman")
   (setq tabulated-list-format [("name" 12 t)
                                ("status" 12 t)
                                ("command" 12 nil)])
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key (cons "name" nil))
   (tabulated-list-init-header))
+
+(defvar foreman-env-mode-map nil "Keymap for foreman-env mode.")
+(setq foreman-env-mode-map (make-sparse-keymap))
+(define-key foreman-env-mode-map (kbd "C-c C-c") 'foreman-env-save)
+(define-key foreman-env-mode-map (kbd "C-c C-k") 'foreman-env-abort)
+
+(define-derived-mode foreman-env-mode fundamental-mode "Foreman ENV"
+  "mode for editing process enviroment variables")
 
 (defun foreman ()
   (interactive)
@@ -95,11 +102,13 @@
   (if (> (count-lines (point) (point-max)) 1)
       (progn 
         (forward-line 1)
+        (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
         (foreman-view-buffer))))
 
 (defun foreman-previous-line ()
   (interactive)
   (forward-line -1)
+  (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
   (foreman-view-buffer))
 
 (defun load-procfile (path)
@@ -141,7 +150,8 @@
   (if (buffer-live-p buffer) buffer
     (foreman-make-task-buffer task-name working-directory)))
 
-(defun foreman-set-env ()
+(defun foreman-env-save ()
+  (interactive)
   (let ((lines (->> (buffer-string)
                     s-lines
                     (-remove 's-blank?)
@@ -149,27 +159,32 @@
         (task (cdr (assoc local-task-id foreman-tasks))))
     (if (assoc 'env task)
         (setf (cdr (assoc 'env task)) lines)
-      (setq task (cons `(env . ,lines) task))))
+      (setq task (cons `(env . ,lines) task)))
+    (setf (cdr (assoc local-task-id foreman-tasks)) task))
   (set-buffer-modified-p nil)
-  (kill-buffer)
-  t)
+  (kill-buffer))
+
+(defun foreman-env-abort ()
+  (interactive)
+  (kill-buffer))
 
 (defun foreman-edit-env ()
   (interactive)
   (let ((task-id (get-text-property (point) 'tabulated-list-id))
-        (buffer (get-buffer-create "*foreman-env*"))
-        (save-buffer (lambda () (message "aha"))))
+        (buffer (get-buffer-create "*foreman-env*")))
     (with-current-buffer buffer
       (erase-buffer)
-      (conf-mode)
-      (setq buffer-file-name "foreman-env")
-      (defvar-local local-task-id task-id)
-      (add-hook 'write-contents-functions 'foreman-set-env)
-      (insert "# environment variables will passed after process restart\n")
-      (insert "# example http_proxy=http://localhost:8080\n")
+      (foreman-env-mode)
+      (set (make-local-variable 'local-task-id) task-id)
+      (insert "# environment variables will passed after process restart
+# C-c C-c to save, C-c C-k to abort
+# example
+#
+#   http_proxy=http://localhost:8080
+#\n")
       (-each (foreman-get-in foreman-tasks task-id 'env)
         (lambda (variable) (insert (format "%s\n" variable))))
-      (goto-char 0))
+      (goto-line 7))
     (switch-to-buffer buffer)))
 
 (defun foreman-start-proc ()
@@ -187,8 +202,11 @@
              (directory (cdr (assoc 'directory task)))
              (name (format "*%s:%s*" (-last-item (f-split directory)) (cdr (assoc 'name task))))
              (buffer (foreman-ensure-task-buffer name directory (cdr (assoc 'buffer task))))
+             (env (cdr (assoc 'env task)))
              (process (with-current-buffer buffer
-                        (apply 'start-process-shell-command name buffer (s-split " +" command)))))
+                        (erase-buffer)
+                        (let ((process-environment (append env process-environment)))
+                          (apply 'start-process-shell-command name buffer (s-split " +" command))))))
         (if (assoc 'buffer task)
             (setf (cdr (assoc 'buffer task)) buffer)
           (setq task (cons `(buffer . ,buffer) task)))
@@ -236,21 +254,20 @@
       (apply 'foreman-get-in (cdr (assoc (car keys) alist)) (cdr keys))
     alist))
 
+(defun foreman-kill-process (process timeout)
+  (kill-process process)
+  (with-timeout (timeout (message "process not killed"))
+    (while (process-live-p process)
+      (sit-for .05))))
+
 (defun foreman-restart-proc ()
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
-         (task (cdr (assoc task-id foreman-tasks)))
-         (buffer (cdr (assoc 'buffer task)))
-         (command (cdr (assoc 'command task)))
-         (directory (cdr (assoc 'directory task)))
-         (name (format "*%s:%s*" (-last-item (f-split directory)) (cdr (assoc 'name task))))
-         (process (cdr (assoc 'process task))))
+         (process (foreman-get-in foreman-tasks task-id 'process )))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
         (progn 
-          (kill-process process)
-          (setf (cdr (assoc 'process task))
-                (with-current-buffer buffer
-                  (apply 'start-process-shell-command name buffer (s-split " +" command))))
+          (foreman-kill-process process 2)
+          (foreman-start-proc-internal task-id)
           (revert-buffer)))))
 
 (defun foreman-fill-buffer ()
@@ -274,16 +291,16 @@
                          (cdr (assoc 'command detail))))))) foreman-tasks))
 
 (defun foreman-restore-cursor ()
-  (while (and (< (point) (point-max))
-              (not (string= foreman-current-id
-                            (get-text-property (point) 'tabulated-list-id))))
-    (next-line)))
+  (if foreman-current-id
+      (while (and (< (point) (point-max))
+                  (not (string= foreman-current-id
+                                (get-text-property (point) 'tabulated-list-id))))
+        (next-line))))
 
 (add-hook 'tabulated-list-revert-hook
           (lambda ()
             (interactive)
             (load-procfile (find-procfile))
-            (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
             (foreman-fill-buffer)
             (foreman-restore-cursor)))
 
