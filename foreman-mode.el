@@ -145,13 +145,23 @@
               ".")))
     (if dir (f-expand foreman:procfile dir))))
 
+(defun foreman-process-output-filter (proc string)
+  (when (buffer-live-p (process-buffer proc))
+    (with-current-buffer (process-buffer proc)
+      (let* ((mark (process-mark proc))
+             (moving (= (point) mark)))
+        (save-excursion
+          (goto-char mark)
+          (insert string)
+          (ansi-color-apply-on-region mark (point-max))
+          (set-marker mark (point-max)))
+        (if moving (goto-char (process-mark proc)))))))
+
 (defun foreman-make-task-buffer (task-name working-directory)
   (let ((buffer (generate-new-buffer task-name)))
     (with-current-buffer buffer
       (setq default-directory (f-slash working-directory))
-      (set (make-local-variable 'window-point-insertion-type) t)
-      (add-hook 'after-change-functions (lambda (start end length)
-                                          (ansi-color-apply-on-region start end))))
+      (set (make-local-variable 'window-point-insertion-type) t))
     buffer))
 
 (defun foreman-ensure-task-buffer (task-name working-directory buffer)
@@ -215,6 +225,7 @@
                         (erase-buffer)
                         (let ((process-environment (append env process-environment)))
                           (apply 'start-process-shell-command name buffer (s-split " +" command))))))
+        (set-process-filter process 'foreman-process-output-filter)
         (if (assoc 'buffer task)
             (setf (cdr (assoc 'buffer task)) buffer)
           (setq task (cons `(buffer . ,buffer) task)))
