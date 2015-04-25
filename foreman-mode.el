@@ -65,14 +65,12 @@
 
 (defvar foreman-env-font-lock-defaults nil)
 (setq foreman-env-font-lock-defaults
-  `(("\\([^=]+\\)=\\(.*\\)" (1 font-lock-variable-name-face) (2 font-lock-string-face))
-    ("\\(#.*\\)" (1 font-lock-comment-face))))
+  `(("^\\([^#=]+\\)=\\(.*\\)$" (1 font-lock-variable-name-face) (2 font-lock-string-face))
+    ("^\\(#.*\\)$" (1 font-lock-comment-face))))
 
 (define-derived-mode foreman-env-mode fundamental-mode "Foreman ENV"
   "mode for editing process enviroment variables"
-  (setq font-lock-defaults '(foreman-env-font-lock-defaults))
-  (modify-syntax-entry ?# "< b" coffee-mode-syntax-table)
-  (modify-syntax-entry ?\n "> b" coffee-mode-syntax-table))
+  (setq font-lock-defaults '(foreman-env-font-lock-defaults)))
 
 (defun foreman ()
   (interactive)
@@ -90,10 +88,10 @@
   (interactive)
   (-each (load-procfile (find-procfile))
     (lambda (task-id)
-      (cond ((assoc task-id foreman-tasks)
-             (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-               (if buffer (kill-buffer buffer)))
-             (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks))))))
+      (when (assoc task-id foreman-tasks)
+        (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
+          (if buffer (kill-buffer buffer)))
+        (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks)))))
   (message "all process killed"))
 
 (defun foreman-clear ()
@@ -194,9 +192,9 @@
       (erase-buffer)
       (foreman-env-mode)
       (set (make-local-variable 'local-task-id) task-id)
-      (insert "# environment variables will be passed when start/restart process
+      (insert "# Environment variables will be passed when start/restart process
 # C-c C-c to save, C-c C-k to abort
-# example
+# Example:
 #
 #   http_proxy=http://localhost:8080
 #\n")
@@ -239,19 +237,19 @@
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (task (cdr (assoc task-id foreman-tasks)))
          (process (cdr (assoc 'process task))))
-    (cond ((and (process-live-p process)
-                (y-or-n-p (format "kill process %s? " (process-name process))))
-           (kill-process process)
-           (revert-buffer)))))
+    (when (and (process-live-p process)
+               (y-or-n-p (format "kill process %s? " (process-name process))))
+      (kill-process process)
+      (revert-buffer))))
 
 (defun foreman-kill-buffer ()
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-    (cond ((and (buffer-live-p buffer)
-                (y-or-n-p (format "kill buffer %s? " (buffer-name buffer))))
-           (kill-buffer buffer)
-           (revert-buffer)))))
+    (when (and (buffer-live-p buffer)
+               (y-or-n-p (format "kill buffer %s? " (buffer-name buffer))))
+      (kill-buffer buffer)
+      (revert-buffer))))
 
 (defun foreman-error-buffer (msg)
   (let ((buffer (get-buffer-create "*foreman-error*")))
