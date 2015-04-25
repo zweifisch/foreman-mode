@@ -21,10 +21,6 @@
 (require 'tabulated-list)
 (require 'ansi-color)
 
-(defcustom foreman:history-path "~/.emacs.d/foreman-history"
-  "path for persistent proc history"
-  :group 'foreman
-  :type 'string)
 
 (defcustom foreman:procfile "Procfile"
   "Procfile name"
@@ -32,7 +28,6 @@
   :type 'string)
 
 (defvar foreman-tasks '())
-;; (setq foreman-tasks '())
 
 (defvar foreman-current-id nil)
 
@@ -50,13 +45,14 @@
 (define-key foreman-mode-map "p" 'foreman-previous-line)
 
 (define-derived-mode foreman-mode tabulated-list-mode "Foreman"
-  "forman-mode to manage procfile-based applications"
+  "foreman-mode to manage procfile-based applications"
   (setq tabulated-list-format [("name" 12 t)
                                ("status" 12 t)
                                ("command" 12 nil)])
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key (cons "name" nil))
-  (tabulated-list-init-header))
+  (tabulated-list-init-header)
+  (add-hook 'tabulated-list-revert-hook 'foreman nil t))
 
 (defvar foreman-env-mode-map nil "Keymap for foreman-env mode.")
 (setq foreman-env-mode-map (make-sparse-keymap))
@@ -74,25 +70,32 @@
 
 (defun foreman ()
   (interactive)
-  (load-procfile (find-procfile))
-  (foreman-fill-buffer)
-  (foreman-restore-cursor))
+  (let ((procfile (find-procfile)))
+    (when procfile
+      (let ((procs (load-procfile procfile)))
+        (switch-to-buffer
+         (foreman-fill-buffer procs))))))
 
 (defun foreman-start ()
   (interactive)
-  (-each (load-procfile (find-procfile))
-    'foreman-start-proc-internal)
-  (foreman-fill-buffer))
+  (let ((procfile (find-procfile)))
+    (when procfile
+      (let ((procs (load-procfile (find-procfile))))
+        (-each procs 'foreman-start-proc-internal)
+        (switch-to-buffer
+         (foreman-fill-buffer procs))))))
 
 (defun foreman-stop ()
   (interactive)
-  (-each (load-procfile (find-procfile))
-    (lambda (task-id)
-      (when (assoc task-id foreman-tasks)
-        (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-          (if buffer (kill-buffer buffer)))
-        (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks)))))
-  (message "all process killed"))
+  (let ((procfile (find-procfile)))
+    (when procfile
+      (-each (load-procfile procfile)
+        (lambda (task-id)
+          (when (assoc task-id foreman-tasks)
+            (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
+              (if buffer (kill-buffer buffer)))
+            (setq foreman-tasks (delq (assoc task-id foreman-tasks) foreman-tasks)))))
+      (message "All process killed"))))
 
 (defun foreman-clear ()
   (interactive)
@@ -105,11 +108,10 @@
 
 (defun foreman-next-line ()
   (interactive)
-  (if (> (count-lines (point) (point-max)) 1)
-      (progn 
-        (forward-line 1)
-        (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
-        (foreman-view-buffer))))
+  (when (> (count-lines (point) (point-max)) 1)
+      (forward-line 1)
+      (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
+      (foreman-view-buffer)))
 
 (defun foreman-previous-line ()
   (interactive)
@@ -141,7 +143,8 @@
               (lambda (path)
                 (f-exists? (f-expand foreman:procfile path)))
               ".")))
-    (if dir (f-expand foreman:procfile dir))))
+    (if dir (f-expand foreman:procfile dir)
+      (message "Procfile not found"))))
 
 (defun foreman-process-output-filter (proc string)
   (when (buffer-live-p (process-buffer proc))
@@ -239,7 +242,7 @@
          (process (cdr (assoc 'process task))))
     (when (and (process-live-p process)
                (y-or-n-p (format "kill process %s? " (process-name process))))
-      (kill-process process)
+      (foreman-kill-process-timeout process 2)
       (revert-buffer))))
 
 (defun foreman-kill-buffer ()
@@ -271,7 +274,7 @@
       (apply 'foreman-get-in (cdr (assoc (car keys) alist)) (cdr keys))
     alist))
 
-(defun foreman-kill-process (process timeout)
+(defun foreman-kill-process-timeout (process timeout)
   (kill-process process)
   (with-timeout (timeout nil)
     (while (process-live-p process)
@@ -284,20 +287,27 @@
          (process (foreman-get-in foreman-tasks task-id 'process )))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
         (progn 
-          (if (foreman-kill-process process 2)
+          (if (foreman-kill-process-timeout process 2)
               (foreman-start-proc-internal task-id)
             (message "process still alive"))
           (revert-buffer)))))
 
-(defun foreman-fill-buffer ()
-  (switch-to-buffer (get-buffer-create "*foreman*"))
-  (kill-all-local-variables)
-  (setq buffer-read-only nil)
-  (erase-buffer)
-  (foreman-mode)
-  (setq tabulated-list-entries (foreman-task-tabulate))
-  (tabulated-list-print t)
-  (setq buffer-read-only t))
+(defun foreman-fill-buffer (task-ids)
+  (let ((directory default-directory)
+        (buffer (get-buffer-create "*foreman*")))
+    (with-current-buffer buffer
+      (setq default-directory directory)
+      (setq buffer-read-only nil)
+      (erase-buffer)
+      (foreman-mode)
+      (setq tabulated-list-entries
+            (-filter (lambda (task)
+                       (-contains? task-ids (car task)))
+                     (foreman-task-tabulate)))
+      (tabulated-list-print t)
+      (setq buffer-read-only t)
+      (foreman-restore-cursor))
+    buffer))
 
 (defun foreman-task-tabulate ()
   (-map (lambda (task)
@@ -307,21 +317,15 @@
                   (vconcat
                    (list (cdr (assoc 'name detail))
                          (if process (symbol-name (process-status process)) "")
-                         (cdr (assoc 'command detail))))))) foreman-tasks))
+                         (cdr (assoc 'command detail)))))))
+        foreman-tasks))
 
 (defun foreman-restore-cursor ()
   (if foreman-current-id
-      (while (and (< (point) (point-max))
+      (while (and (> (count-lines (point) (point-max)) 1)
                   (not (string= foreman-current-id
                                 (get-text-property (point) 'tabulated-list-id))))
         (next-line))))
-
-(add-hook 'tabulated-list-revert-hook
-          (lambda ()
-            (interactive)
-            (load-procfile (find-procfile))
-            (foreman-fill-buffer)
-            (foreman-restore-cursor)))
 
 (provide 'foreman-mode)
 ;;; foreman-mode.el ends here
