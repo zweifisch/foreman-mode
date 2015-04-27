@@ -7,7 +7,7 @@
 ;; Keywords: foreman
 ;; Version: 0.0.1
 ;; Created: 17th Apr 2015
-;; Package-Requires: ((s "1.9.0") (dash "2.10.0") (dash-functional "1.2.0") (f "0.17.2"))
+;; Package-Requires: ((s "1.9.0") (dash "2.10.0") (dash-functional "1.2.0") (f "0.17.2") (emacs "24"))
 
 ;;; Commentary:
 ;;
@@ -22,7 +22,7 @@
 (require 'ansi-color)
 
 
-(defcustom foreman:procfile "Procfile"
+(defcustom foreman-procfile-name "Procfile"
   "Procfile name"
   :group 'foreman
   :type 'string)
@@ -68,28 +68,30 @@
   "mode for editing process enviroment variables"
   (setq font-lock-defaults '(foreman-env-font-lock-defaults)))
 
+;;;###autoload
 (defun foreman ()
   (interactive)
-  (let ((procfile (find-procfile)))
+  (let ((procfile (foreman-find-procfile)))
     (when procfile
-      (let ((procs (load-procfile procfile)))
+      (let ((procs (foreman-load-procfile procfile)))
         (switch-to-buffer
          (foreman-fill-buffer procs))))))
 
+;;;###autoload
 (defun foreman-start ()
   (interactive)
-  (let ((procfile (find-procfile)))
+  (let ((procfile (foreman-find-procfile)))
     (when procfile
-      (let ((procs (load-procfile (find-procfile))))
+      (let ((procs (foreman-load-procfile (foreman-find-procfile))))
         (-each procs 'foreman-start-proc-internal)
         (switch-to-buffer
          (foreman-fill-buffer procs))))))
 
 (defun foreman-stop ()
   (interactive)
-  (let ((procfile (find-procfile)))
+  (let ((procfile (foreman-find-procfile)))
     (when procfile
-      (-each (load-procfile procfile)
+      (-each (foreman-load-procfile procfile)
         (lambda (task-id)
           (when (assoc task-id foreman-tasks)
             (let ((buffer (foreman-get-in foreman-tasks task-id 'buffer)))
@@ -119,7 +121,7 @@
   (setq foreman-current-id (get-text-property (point) 'tabulated-list-id))
   (foreman-view-buffer))
 
-(defun load-procfile (path)
+(defun foreman-load-procfile (path)
   (let ((directory (f-parent path)))
     (with-temp-buffer
       (if (f-readable? path)
@@ -138,12 +140,12 @@
                                      foreman-tasks)))
                      key)))))))
 
-(defun find-procfile ()
+(defun foreman-find-procfile ()
   (let ((dir (f-traverse-upwards
               (lambda (path)
-                (f-exists? (f-expand foreman:procfile path)))
+                (f-exists? (f-expand foreman-procfile-name path)))
               ".")))
-    (if dir (f-expand foreman:procfile dir)
+    (if dir (f-expand foreman-procfile-name dir)
       (message "Procfile not found"))))
 
 (defun foreman-process-output-filter (proc string)
