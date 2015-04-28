@@ -31,6 +31,8 @@
 
 (defvar foreman-current-id nil)
 
+(defvar foreman-local-task-id nil)
+
 (defvar foreman-mode-map nil "Keymap for foreman mode.")
 
 (setq foreman-mode-map (make-sparse-keymap))
@@ -177,11 +179,11 @@
                     s-lines
                     (-remove 's-blank?)
                     (-remove (-partial 's-starts-with? "#"))))
-        (task (cdr (assoc local-task-id foreman-tasks))))
+        (task (cdr (assoc foreman-local-task-id foreman-tasks))))
     (if (assoc 'env task)
         (setf (cdr (assoc 'env task)) lines)
       (setq task (cons `(env . ,lines) task)))
-    (setf (cdr (assoc local-task-id foreman-tasks)) task))
+    (setf (cdr (assoc foreman-local-task-id foreman-tasks)) task))
   (set-buffer-modified-p nil)
   (kill-buffer))
 
@@ -196,7 +198,7 @@
     (with-current-buffer buffer
       (erase-buffer)
       (foreman-env-mode)
-      (set (make-local-variable 'local-task-id) task-id)
+      (set (make-local-variable 'foreman-local-task-id) task-id)
       (insert "# Environment variables will be passed when start/restart process
 # C-c C-c to save, C-c C-k to abort
 # Example:
