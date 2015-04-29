@@ -1,4 +1,4 @@
-;;; foreman-mode.el --- foreman-mode
+;;; foreman-mode.el --- View and manage Procfile-based applications
 
 ;; Copyright (C) 2015 ZHOU Feng
 
