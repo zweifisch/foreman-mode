@@ -1,5 +1,7 @@
 * foreman-mode
 
+[[http://melpa.org/#/foreman-mode][file:http://melpa.org/packages/foreman-mode-badge.svg]]
+
 Manage Procfile-based applications in Emacs
 
 use =foreman-start= to start all applications

@@ -215,8 +215,7 @@
   (let ((task-id (get-text-property (point) 'tabulated-list-id)))
     (foreman-start-proc-internal task-id)
     (revert-buffer)
-    (pop-to-buffer (foreman-get-in foreman-tasks task-id 'buffer) nil t)
-    (other-window -1)))
+    (display-buffer (foreman-get-in foreman-tasks task-id 'buffer) t)))
 
 (defun foreman-start-proc-internal (task-id)
   (if (not (process-live-p (foreman-get-in foreman-tasks task-id 'process)))
@@ -269,9 +268,8 @@
   (interactive)
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (buffer (foreman-get-in foreman-tasks task-id 'buffer)))
-    (pop-to-buffer (if (buffer-live-p buffer) buffer
-                     (foreman-error-buffer "application not running\n")) t t)
-    (other-window -1)))
+    (display-buffer (if (buffer-live-p buffer) buffer
+                     (foreman-error-buffer "application not running\n")) t)))
 
 (defun foreman-get-in (alist &rest keys)
   (if keys
