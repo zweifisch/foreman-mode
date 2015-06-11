@@ -54,6 +54,7 @@
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key (cons "name" nil))
   (tabulated-list-init-header)
+  (hl-line-mode)
   (add-hook 'tabulated-list-revert-hook 'foreman nil t))
 
 (defvar foreman-env-mode-map nil "Keymap for foreman-env mode.")
@@ -323,11 +324,12 @@
         foreman-tasks))
 
 (defun foreman-restore-cursor ()
-  (if foreman-current-id
+  (when foreman-current-id
       (while (and (> (count-lines (point) (point-max)) 1)
                   (not (string= foreman-current-id
                                 (get-text-property (point) 'tabulated-list-id))))
-        (next-line))))
+        (next-line))
+      (beginning-of-line)))
 
 (provide 'foreman-mode)
 ;;; foreman-mode.el ends here
