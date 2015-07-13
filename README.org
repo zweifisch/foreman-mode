@@ -1,8 +1,11 @@
 * foreman-mode
 
 [[http://melpa.org/#/foreman-mode][file:http://melpa.org/packages/foreman-mode-badge.svg]]
+[[http://stable.melpa.org/#/foreman-mode][file:http://stable.melpa.org/packages/foreman-mode-badge.svg]]
+[[https://github.com/zweifisch/foreman-mode/tags][file:https://img.shields.io/github/tag/zweifisch/foreman-mode.svg]]
+[[http://www.gnu.org/licenses/gpl-3.0.html][http://img.shields.io/:license-gpl3-blue.svg]]
 
-Manage Procfile-based applications in Emacs
+/Manage Procfile-based applications in Emacs/
 
 use =foreman-start= to start all applications
 or =foreman= to list all applications specified in =Procfile=
