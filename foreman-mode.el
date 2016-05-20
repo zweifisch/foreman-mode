@@ -166,6 +166,7 @@
 (defun foreman-make-task-buffer (task-name working-directory)
   (let ((buffer (generate-new-buffer task-name)))
     (with-current-buffer buffer
+      (buffer-disable-undo)
       (setq default-directory (f-slash working-directory))
       (set (make-local-variable 'window-point-insertion-type) t))
     buffer))
@@ -289,7 +290,7 @@
   (let* ((task-id (get-text-property (point) 'tabulated-list-id))
          (process (foreman-get-in foreman-tasks task-id 'process )))
     (if (y-or-n-p (format "restart process %s? " (process-name process)))
-        (progn 
+        (progn
           (if (foreman-kill-process-timeout process 2)
               (foreman-start-proc-internal task-id)
             (message "process still alive"))
