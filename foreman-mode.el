@@ -145,7 +145,7 @@
       (->> (s-lines (buffer-string))
            (-remove 's-blank?)
            (-remove (-partial 's-starts-with? "#"))
-           (-map (-partial 's-split ":"))
+           (-map (-partial 's-split ": "))
            (-map (lambda (task)
                    (let ((key (format "%s:%s" directory (car task))))
                      (if (not (assoc key foreman-tasks))
